@@ -7,6 +7,7 @@ import (
 
 var (
 	ErrRecordNotFound = fmt.Errorf("record not found")
+	ErrEditConflict   = fmt.Errorf("edit conflict")
 )
 
 type Models struct {
@@ -15,6 +16,7 @@ type Models struct {
 		Get(id int64) (*Movie, error)
 		Update(movie *Movie) error
 		Delete(id int64) error
+		GetAll(title string, genres []string, filters Filters) ([]*Movie, error)
 	}
 }
 
