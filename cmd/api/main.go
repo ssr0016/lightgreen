@@ -8,14 +8,12 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"time"
 
-	"github.com/golang-migrate/migrate/v4"
-	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/lib/pq"
 	"greenlight.samson.net/internal/data"
+	"greenlight.samson.net/internal/jsonlog"
 )
 
 const version = "1.0.0"
@@ -33,7 +31,7 @@ type config struct {
 
 type application struct {
 	config config
-	logger *log.Logger
+	logger *jsonlog.Logger
 	models data.Models
 }
 
@@ -50,38 +48,38 @@ func main() {
 
 	flag.Parse()
 
-	logger := log.New(os.Stdout, "", log.Ldate|log.Ltime)
+	logger := jsonlog.New(os.Stdout, jsonlog.LevelInfo)
 
 	db, err := openDB(cfg)
 	if err != nil {
-		logger.Fatal(err)
+		logger.PrintFatal(err, nil)
 	}
 	defer db.Close()
 
-	logger.Printf("database connection pool established")
+	logger.PrintInfo("database connection pool established", nil)
 
 	// Use an absolute path to the migrations directory
-	migrationsDir, err := filepath.Abs("/home/samson/greenlight/migrations")
-	if err != nil {
-		logger.Fatal(err)
-	}
+	// migrationsDir, err := filepath.Abs("/home/samson/greenlight/migrations")
+	// if err != nil {
+	// 	logger.PrintFatal(err, nil)
+	// }
 
-	migrationDriver, err := postgres.WithInstance(db, &postgres.Config{})
-	if err != nil {
-		logger.Fatal(err)
-	}
+	// migrationDriver, err := postgres.WithInstance(db, &postgres.Config{})
+	// if err != nil {
+	// 	logger.PrintFatal(err, nil)
+	// }
 
-	migrator, err := migrate.NewWithDatabaseInstance("file://"+migrationsDir, "postgres", migrationDriver)
-	if err != nil {
-		logger.Fatal(err)
-	}
+	// migrator, err := migrate.NewWithDatabaseInstance("file://"+migrationsDir, "postgres", migrationDriver)
+	// if err != nil {
+	// 	logger.PrintFatal(err, nil)
+	// }
 
-	err = migrator.Up()
-	if err != nil && err != migrate.ErrNoChange {
-		logger.Fatal(err)
-	}
+	// err = migrator.Up()
+	// if err != nil && err != migrate.ErrNoChange {
+	// 	logger.PrintFatal(err, nil)
+	// }
 
-	logger.Printf("database migrations complete")
+	// logger.PrintInfo("database migrations complete", nil)
 
 	app := &application{
 		config: cfg,
@@ -92,13 +90,18 @@ func main() {
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.port),
 		Handler:      app.routes(),
+		ErrorLog:     log.New(logger, "", 0),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}
 
-	logger.Printf("starting %s server on %s", cfg.env, srv.Addr)
+	logger.PrintInfo("starting server", map[string]string{
+		"addr": srv.Addr,
+		"env":  cfg.env,
+	})
+
 	err = srv.ListenAndServe()
-	logger.Fatal(err)
+	logger.PrintFatal(err, nil)
 }
 
 func openDB(cfg config) (*sql.DB, error) {
