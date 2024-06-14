@@ -207,7 +207,6 @@ func (m MovieModel) GetAll(title string, genres []string, filters Filters) ([]*M
 }
 
 // Unit Test
-
 type MockMovieModel struct{}
 
 func (m MockMovieModel) Insert(movie *Movie) error {
