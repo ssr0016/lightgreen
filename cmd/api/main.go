@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"database/sql"
+	"expvar"
 	"flag"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,6 +41,10 @@ type config struct {
 		username string
 		password string
 		sender   string
+	}
+
+	cors struct {
+		trustedOrigins []string
 	}
 }
 
@@ -78,6 +84,11 @@ func main() {
 	flag.StringVar(&cfg.smtp.password, "smtp-password", "cc6db5bb8d1aa4", "SMTP password")
 	flag.StringVar(&cfg.smtp.sender, "smtp-sender", "Greenlight <no-reply@greenlight.samson.net>", "SMTP sender")
 
+	flag.Func("cors-trusted-origins", "Trusted CORS origins (space separated)", func(val string) error {
+		cfg.cors.trustedOrigins = strings.Fields(val)
+		return nil
+	})
+
 	flag.Parse()
 
 	logger := jsonlog.New(os.Stdout, jsonlog.LevelInfo)
@@ -112,6 +123,9 @@ func main() {
 	// }
 
 	// logger.PrintInfo("database migrations complete", nil)
+
+	// Publish a new "version" variable in the expvar handler containing our application
+	expvar.NewString("version").Set(version)
 
 	app := &application{
 		config: cfg,
