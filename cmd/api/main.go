@@ -19,9 +19,10 @@ import (
 	"greenlight.samson.net/internal/mailer"
 )
 
-var buildTime string
-
-const version = "1.0.0"
+var (
+	buildTime string
+	version   string
+)
 
 type config struct {
 	port int
