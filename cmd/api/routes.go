@@ -34,5 +34,5 @@ func (app *application) routes() http.Handler {
 	// 2. Middleware rate limit for http request
 	// 3. Middleware authenticate for http request
 	// 4. Middleware enableCORS for http request
-	return app.recoverPanic(app.enableCORS(app.rateLimit(app.authenticate(router))))
+	return app.metrics(app.recoverPanic(app.enableCORS(app.rateLimit(app.authenticate(router)))))
 }
