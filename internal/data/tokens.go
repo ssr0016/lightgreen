@@ -14,6 +14,7 @@ import (
 const (
 	ScopeActivation     = "activation"
 	ScopeAuthentication = "authentication"
+	ScopePasswordReset  = "password-reset"
 )
 
 // Define a Token struct to hold plaintext and hashed token data, user ID, expiry time, and scope.

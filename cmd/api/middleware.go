@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/felixge/httpsnoop"
+	"github.com/pascaldekloe/jwt"
 	"github.com/tomasen/realip"
 	"golang.org/x/time/rate"
 	"greenlight.samson.net/internal/data"
-	"greenlight.samson.net/internal/validator"
 )
 
 // rate limiting the http request
@@ -97,6 +97,59 @@ func (app *application) recoverPanic(next http.Handler) http.Handler {
 	})
 }
 
+// func (app *application) authenticate(next http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		// Add "Vary: Authorization" header for caching
+// 		w.Header().Add("Vary", "Authorization")
+
+// 		// Retrieve the value of the Authorization header.
+// 		authorizationHeader := r.Header.Get("Authorization")
+
+// 		// If no Authorization header found, set AnonymousUser to request context and call next handler.
+// 		if authorizationHeader == "" {
+// 			r = app.contextSetUser(r, data.AnonymousUser)
+// 			next.ServeHTTP(w, r)
+// 			return
+// 		}
+
+// 		// Otherwise, expect "Bearer <token>". Split and handle unauthorized response if format is incorrect.
+// 		headerParts := strings.Split(authorizationHeader, " ")
+// 		if len(headerParts) != 2 || headerParts[0] != "Bearer" {
+// 			app.invalidAuthenticationTokenResponse(w, r)
+// 			return
+// 		}
+
+// 		// Extract the actual authentication token from the header parts.
+// 		token := headerParts[1]
+
+// 		v := validator.New()
+
+// 		// If token isn't valid, send unauthorized response.
+// 		if data.ValidateTokenPlaintext(v, token); !v.Valid() {
+// 			app.invalidAuthenticationTokenResponse(w, r)
+// 			return
+// 		}
+
+// 		// Retrieve user details associated with authentication token.
+// 		user, err := app.models.Users.GetForToken(data.ScopeAuthentication, token)
+// 		if err != nil {
+// 			switch {
+// 			case errors.Is(err, data.ErrRecordNotFound):
+// 				app.invalidAuthenticationTokenResponse(w, r)
+// 			default:
+// 				app.serverErrorResponse(w, r, err)
+// 			}
+// 			return
+// 		}
+
+// 		// Call the contextSetUser() helper to add the user information to the request context.
+// 		r = app.contextSetUser(r, user)
+
+// 		// Call the next handler in the chain.
+// 		next.ServeHTTP(w, r)
+// 	})
+// }
+
 func (app *application) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Add "Vary: Authorization" header for caching
@@ -122,16 +175,40 @@ func (app *application) authenticate(next http.Handler) http.Handler {
 		// Extract the actual authentication token from the header parts.
 		token := headerParts[1]
 
-		v := validator.New()
-
-		// If token isn't valid, send unauthorized response.
-		if data.ValidateTokenPlaintext(v, token); !v.Valid() {
+		// Parse the JWT and extract claims. Returns an error if the JWT is tampered with or the algorithm is invalid.
+		claims, err := jwt.HMACCheck([]byte(token), []byte(app.config.jwt.secret))
+		if err != nil {
 			app.invalidAuthenticationTokenResponse(w, r)
 			return
 		}
 
-		// Retrieve user details associated with authentication token.
-		user, err := app.models.Users.GetForToken(data.ScopeAuthentication, token)
+		// Check if the JWT is still valid at this moment in time.
+		if !claims.Valid(time.Now()) {
+			app.invalidAuthenticationTokenResponse(w, r)
+			return
+		}
+
+		// Check that the issuer is our application.
+		if claims.Issuer != "greenlight.samson.net" {
+			app.invalidAuthenticationTokenResponse(w, r)
+			return
+		}
+
+		// Check that our application is in the expected audiences for the JWT.
+		if !claims.AcceptAudience("greenlight.samson.net") {
+			app.invalidAuthenticationTokenResponse(w, r)
+			return
+		}
+
+		// JWT is verified and trusted. Extract user ID from claims subject and convert to int64.
+		userID, err := strconv.ParseInt(claims.Subject, 10, 64)
+		if err != nil {
+			app.serverErrorResponse(w, r, err)
+			return
+		}
+
+		// Lookup the user record from the database.
+		user, err := app.models.Users.Get(userID)
 		if err != nil {
 			switch {
 			case errors.Is(err, data.ErrRecordNotFound):
